@@ -2,6 +2,16 @@
 
 ## Parte 2
 
+Os exemplos apresentados nesta parte das notas são baseados no Banco que é criado a partir dos _scripts_ SQL que estão na pasta `mysql2/scripts`, basta executá-los na ordem que são apresentados.
+
+### Índice
+
+1. [Filtrando consultas](#1-filtrando-consultas)
+2. [Apresentação dos dados de uma consulta](#2-apresentação-dos-dados-de-uma-consulta)
+3. [Juntando tabelas](#3-juntando-tabelas)
+4. [](#4-)
+5. [](#5-)
+
 ## 1 Filtrando consultas
 
 ### 1.1 Consultas condicionais
@@ -36,6 +46,8 @@ Se colocarmos o símbulo de porcentagem dos dois lados do termo buscado, serão 
 SELECT * FROM TABELA_DE_PRODUTOS WHERE SABOR LIKE '%Ma%';
 ```
 
+[↑ voltar ao topo](#mysql)
+
 ## 2 Apresentação dos dados de uma consulta
 
 ### 2.1 Registros distintos
@@ -58,7 +70,7 @@ Se quisermos limitar a saída mostrando apenas os primeiros N registros, basta a
 
 ```sql
 SELECT * FROM TABELA_DE_PRODUTOS LIMIT 5;
-```
+```[↑ voltar ao topo](#mysql)
 
 E também é possível iniciar a apresentação a partir de qualquer registro retornado, basta passar primeiro o "número" da linha. A saber, a primeira linha é a de número zero e o número da linha é inclusivo. Ou seja, serão apresentados os cinco próximos registros a partir da linha 15 (décima sexta linha) contando com ela:
 
@@ -85,6 +97,8 @@ SELECT * from TABELA_DE_PRODUTOS ORDER BY NOME_DO_PRODUTO DESC;
 ```sql
 SELECT * from TABELA_DE_PRODUTOS ORDER BY EMBALAGEM DESC, NOME_DO_PRODUTO ASC;
 ```
+
+[↑ voltar ao topo](#mysql)
 
 ### 2.4 Funções de agregação
 
@@ -171,11 +185,13 @@ SELECT EMBALAGEM, COUNT(*) AS QTD, MAX(PRECO_DE_LISTA) AS MAIOR_PRECO, MIN(PRECO
 FROM TABELA_DE_PRODUTOS GROUP BY EMBALAGEM HAVING SUM(PRECO_DE_LISTA) <= 80 AND MAX(PRECO_DE_LISTA) >= 5;
 ```
 
-##### 2.4.2.1 Quais foram os clientes que fizeram mais de 1400 compras em 2015?
+##### 2.4.2.1 Clientes que fizeram mais de 1400 compras em 2015
 
 ```sql
 SELECT CPF, COUNT(*) AS COMPRAS FROM NOTAS_FISCAIS WHERE YEAR(DATA_VENDA) = 2015 GROUP BY CPF HAVING COUNT(*) > 1400;
 ```
+
+[↑ voltar ao topo](#mysql)
 
 #### 2.4.3 Classificando resultados
 
@@ -238,3 +254,312 @@ CASE
 END as GRUPO_DE_IDADE
 FROM TABELA_DE_CLIENTES;
 ```
+
+[↑ voltar ao topo](#mysql)
+
+## 3 Juntando tabelas e consultas
+
+### 3.1 Juntando tabelas
+
+A forma mais adequada de realizar consultas em mais de uma tabela com apenas uma _query_ é USANDO o comando `JOIN`, que permite unir diferentes tabelas através de colunas que possuam o mesmo conteúdo. Existem diferentes tipos de `JOIN` e formas de "juntar" que não o utilizam:
+
+- `INNER JOIN`: retorna apenas os registros que possuem correspondência
+- `LEFT JOIN`: retorna todos os registros da tabela a esquerda e apenas os correspondêntes da tabela a direita
+- `RIGHT JOIN`: retorna todos os registros da tabela a direita e apenas os correspondêntes da tabela a esquerda
+- `FULL JOIN`: retorna todos os registros das duas tabelas, é o `LEFT` e `RIGHT` mesmo tempo
+- `CROSS JOIN`: retorna um "produto cartesiano" de todos os registros
+
+Vamos considerar as duas tabelas que seguem para ilustrar cada uma das formas de juntá-las em uma _query_:
+
+Nome|ID
+:-|:-:
+João|1
+Maria|3
+PEdro|4
+Claudia|5
+
+ID|Hobby
+:-:|:-
+1|Praia
+3|Futebol
+4|Fotografia
+5|Artesanato
+
+#### 3.1.1 `INNER JOIN`
+
+Com o `INNER JOIN` recuperamos todos os registros que possuem correspondência de acordo com a coluna comum a ambas as tabelas. No `SELECT` passamos as culunas que devem ser apresentadas, acessando-as através do _alias_ definido para cada tabela; no `FROM` passamos a tabela da esquerda com um _alias_; no `INNER JOIN` passamos a tabela da direita, também com um _alias_; e a condição de união das tabelas é passada no `ON`.
+
+```sql
+SELECT A.NOME, B.HOBBY FROM TABELA_DE_NOMES A INNER JOIN TABELA_DE_HOBBIES B ON A.ID = B.ID;
+```
+
+Nome|Hobby
+:-:|:-:
+João|Praia
+Maria|Futebol
+
+Alguns pontos que merecem ser mencionados são:
+
+- não é obrigatório definir _aliases_ para as tabelas, mas se isso não for feito é necessário passar o nome completo da tabela no `SELECT`
+- a necessidade desse prefixo que referência a tabela da qual o campo é oriundo, existe apenas se o nome do campo for comum para as duas tabelas. Ou seja, se quero selecionar um campo cujo nome existe em penas uma das tabelas, posso passar apenas o nome desse campo. Por questões de boas práticas e para facilitar o entendimento, é aconselhável o uso de _aliases_
+- as colunas que fazem a ligação entre as duas tabelas não precisam ter o mesmo nome, apenas o conteúdo que deve ser comum.
+
+##### 3.1.1.1 Exemplo prático: Quantidade vendida
+
+Passando para a Base de Dados da empresa de sucos, verificando as tabelas de vendedores e notas fiscais, observamos que ambas as tabelas possuem uma coluna para armazenar a mátricula do vendedor. Com a _query_ abaixo vamos obter como resultado as duas tabelas unidas:
+
+```sql
+SELECT * FROM TABELA_DE_VENDEDORES A INNER JOIN NOTAS_FISCAIS B ON A.MATRICULA = B.MATRICULA;
+```
+
+Podemos agrupar os registros para obter quantas notas fiscais cada vendedor emitiu:
+
+```sql
+SELECT A.MATRICULA, A.NOME, COUNT(*) FROM TABELA_DE_VENDEDORES A INNER JOIN NOTAS_FISCAIS B ON A.MATRICULA = B.MATRICULA GROUP BY A.MATRICULA, A.NOME;
+```
+
+Ou encontrar qual o faturamento anual:
+
+```sql
+SELECT YEAR(DATA_VENDA), SUM(QUANTIDADE * PRECO) AS FATURAMENTO
+FROM NOTAS_FISCAIS NF INNER JOIN ITENS_NOTAS_FISCAIS INF ON NF.NUMERO = INF.NUMERO
+GROUP BY YEAR(DATA_VENDA);
+```
+
+[↑ voltar ao topo](#mysql)
+
+#### 3.1.2 `LEFT JOIN`
+
+```sql
+SELECT A.NOME, B.HOBBY FROM TABELA_DE_NOMES A LEFT JOIN TABELA_DE_HOBBIES B ON A.ID = B.ID;
+```
+
+Nome|Hobby
+:-:|:-:
+João|Praia
+Maria|Futebol
+Pedro|NULL
+Claudia|NULL
+
+##### 3.1.2.1 Exemplo prático: Cliente que não compra
+
+Existem situações onde existem registros que não possuem correspondência e podemos usar o `LEFT JOIN` para descobrir que registro é esse.
+
+Executando as _queries_ que seguem percebemos que existem 15 clientes cadastrados, mas 14 clientes com notas emitidas.
+
+```sql
+SELECT COUNT(*) FROM TABELA_DE_CLIENTES;
+SELECT CPF, COUNT(*) FROM NOTAS_FISCAIS GROUP BY CPF;
+```
+
+Se fizermos um `LEFT JOIN` abaixo, podemos facilmente identificar qual dos clientes nunca comprou nada, pois todos os registros da tabela a esquerda serão recuperados e um deles não vai ter correspondência na tabela a direita:
+
+```sql
+SELECT DISTINCT C.CPF, C.NOME, NF.CPF FROM TABELA_DE_CLIENTES C LEFT JOIN NOTAS_FISCAIS NF ON C.CPF = NF.CPF;
+```
+
+Essa informação pode ser obtida de forma mais imediata usando a condição de que o campo `CPF` deve ser nulo na tabela a direita. Assim a consulta irá retornar apenas o cliente que nunca comprou nada.
+
+```sql
+SELECT DISTINCT C.CPF, C.NOME, NF.CPF
+FROM TABELA_DE_CLIENTES C LEFT JOIN NOTAS_FISCAIS NF ON C.CPF = NF.CPF
+WHERE NF.CPF IS NULL;
+```
+
+#### 3.1.3 `RIGHT JOIN`
+
+```sql
+SELECT A.NOME, B.HOBBY FROM TABELA_DE_NOMES A RIGHT JOIN TABELA_DE_HOBBIES B ON A.ID = B.ID;
+```
+
+Nome|Hobby
+:-:|:-:
+João|Praia
+Maria|Futebol
+NULL|Fotografia
+NULL|Artesanato
+
+[↑ voltar ao topo](#mysql)
+
+#### 3.1.4 `FULL JOIN`
+
+`FULL JOIN` é o nome do comando de acordo com o padrão ANSI, mas nem todos SGBDs seguem 100% do que o padrão especifica, O MySQL por exemplo não implementa o `FULL JOIN`.
+
+Para contornar a falta desse recurso, devem ser feitos o `LEFT JOIN` e `RIGHT JOIN` ao mesmo tempo, juntando duas consultas SQL em uma só usando o `JOIN`.
+
+Mas a sintaxe padrão será a seguinte:
+
+```sql
+SELECT A.NOME, B.HOBBY FROM TABELA_DE_NOMES A FULL JOIN TABELA_DE_HOBBIES B ON A.ID = B.ID;
+```
+
+Nome|Hobby
+:-:|:-:
+João|Praia
+Maria|Futebol
+Pedro|NULL
+Claudia|NULL
+NULL|Fotografia
+NULL|Artesanato
+
+##### 3.1.4.1 Exemplo prático: Localização
+
+Agora como exemplo vamos analizar o bairro (localização dos escritórios) dos vendedores e os bairros dos clientes. Realizando uma consulta com `INNER JOIN` primeiro, podemos descobrir todos os bairros que possuem clientes e escritórios:
+
+```sql
+SELECT V.BAIRRO, V.NOME AS VENDEDOR, DE_FERIAS, C.NOME AS CLIENTE
+FROM TABELA_DE_VENDEDORES V INNER JOIN TABELA_DE_CLIENTES C ON V.BAIRRO = C.BAIRRO;
+```
+
+Com o `LEFT JOIN` podemos ver quais bairros possuem escritórios mas não clientes:
+
+```sql
+SELECT V.BAIRRO, V.NOME AS VENDEDOR, DE_FERIAS, C.NOME AS CLIENTE
+FROM TABELA_DE_VENDEDORES V LEFT JOIN TABELA_DE_CLIENTES C ON V.BAIRRO = C.BAIRRO;
+```
+
+E com o `RIGHT JOIN` podemos ver quais bairros tem cliente mas não há escritórios:
+
+```sql
+SELECT V.BAIRRO, V.NOME AS VENDEDOR, DE_FERIAS, C.NOME AS CLIENTE
+FROM TABELA_DE_VENDEDORES V LEFT JOIN TABELA_DE_CLIENTES C ON V.BAIRRO = C.BAIRRO;
+```
+
+Usando o `UNION`, conseguimos executar o "`FULL JOIN`" e identificar quais bairros não possuem escritório ou vendedor em apenas uma consulta:
+
+```sql
+SELECT V.BAIRRO, V.NOME AS VENDEDOR, DE_FERIAS, C.NOME AS CLIENTE
+FROM TABELA_DE_VENDEDORES V LEFT JOIN TABELA_DE_CLIENTES C ON V.BAIRRO = C.BAIRRO
+UNION
+SELECT V.BAIRRO, V.NOME AS VENDEDOR, DE_FERIAS, C.NOME AS CLIENTE
+FROM TABELA_DE_VENDEDORES V RIGHT JOIN TABELA_DE_CLIENTES C ON V.BAIRRO = C.BAIRRO;
+```
+
+#### 3.1.5 `CROSS JOIN`
+
+```sql
+SELECT A.NOME, B.HOBBY FROM TABELA_DE_NOMES A, TABELA_DE_HOBBIES B;
+```
+
+Nome|Hobby
+:-:|:-:
+João|Praia
+Maria|Praia
+Pedro|Praia
+Claudia|Praia
+João|Futebol
+Maria|Futebol
+Pedro|Futebol
+Claudia|Futebol
+...|...
+Claudia|Artesanato
+
+[↑ voltar ao topo](#mysql)
+
+### 3.2 Juntando consultas
+
+O comando `UNION` permite combinar várias _queries_ em apenas uma, trazendo os registros resultantes de cada uma delas em apenas uma consulta.
+
+Para usar o `UNION` existe a restrição de que o número e ordem das colunas em relação ao tipo de dado devem ser compátives em todas as _queries_. Os nomes das colunas podem até ser diferentes em cada uma das _queries_, desde que coerentes na quantidade e tipos, nesse caso o resultado será apresentado com o nome das colunas passadas na primeira _query_.
+
+Podemos identificar quais bairros possuem escritórios ou clientes de forma clara. Note que com o comando `UNION`, apenas registros distintos serão retornados:
+
+```sql
+SELECT BAIRRO FROM TABELA_DE_CLIENTES;
+UNION
+SELECT BAIRRO FROM TABELA_DE_VENDEDORES;
+```
+
+Para recuperar **todos** os registros devemos usar o comando `UNION ALL`:
+
+```sql
+SELECT BAIRRO FROM TABELA_DE_CLIENTES;
+UNION ALL
+SELECT BAIRRO FROM TABELA_DE_VENDEDORES;
+```
+
+Agora um exemplo que apresenta mais informações:
+
+```sql
+SELECT BAIRRO, NOME, 'CLIENTE' AS TIPO FROM TABELA_DE_CLIENTES
+UNION
+SELECT BAIRRO, NOME, 'VENDEDOR' AS TIPO FROM TABELA_DE_VENDEDORES;
+```
+
+### 3.3 Sub consultas
+
+É quando usamos uma consulta dentro de outra consulta.
+
+Considere a situação em que temos a `TABELA1` com as colunas `X1` e `Y1`, sendo `X1` uma coluna que os valores são compostos por apenas uma letra e `Y1` é uma coluna de valores inteiros. Além disso temos a `TABELA2` que possui apenas a coluna `Y2` que também armazena inteiros. É possível selecionar apenas os registros da `TABELA1` cujo `Y1` existe em `Y2`:
+
+```sql
+SELECT X1, Y1 FROM TABELA1 WHERE Y1 IN (SELECT Y2 FROM TABELA2);
+```
+
+Também é possível fazer agrupamentos nas sub consultas. Se agruparmos os valores de `X1` com a soma dos `Y1`, teremos usado seguinte _query_:
+
+```sql
+SELECT X1, SUM(Y1) as SOMA_DE_Y1 FROM TABELA1 GROUP BY X1;
+```
+
+Agora podemos usar essa sub consulta para obter apenas os grupos que tiveram uma soma igual a 3 para os valores `Y1`. Note que a sub consulta é tratada como uma tabela pela consulta principal. Se a _query_ tivesse apenas uma função de agregação, assim retornando um único valor, a consulta principal resultará em erro ao ser executada:
+
+```sql
+SELECT Z.X1, Z.SOMA_DE_Y1 FROM (
+    SELECT X1, SUM(Y1) as SOMA_DE_Y1 FROM TABELA1 GROUP BY X1
+) Z WHERE Z.SOMA_DE_Y1 = 3;
+```
+
+#### 3.3.1 Bairros com presença
+
+Clientes dos bairros em que há escritórios:
+
+```sql
+SELECT * FROM TABELA_DE_CLIENTES WHERE BAIRRO IN (SELECT DISTINCT BAIRRO FROM TABELA_DE_VENDEDORES);
+```
+
+#### 3.3.2 Embalagens caras
+
+Podemos identificar produtos caros de acordo com a embalagem:
+
+```sql
+SELECT X.EMBALAGEM, X.MAIOR_PRECO FROM (
+    SELECT EMBALAGEM, MAX(PRECO_DE_LISTA) AS MAIOR_PRECO FROM TABELA_DE_PRODUTOS GROUP BY EMBALAGEM
+) X WHERE X.MAIOR_PRECO > 10;
+```
+
+#### 3.3.3 Alternativa ao `HAVING`
+
+Na seção **2.4.2.1** verificamos quantos clientes fizeram mais de 1400 compras em 2015, usando o comando `HAVING` no `GROUP BY`. O uso das sub consultas pode ser uma alternativa ao uso do `HAVING`.
+
+A sub consulta pode ser um `GROUP BY` do `CPF` e em lugar do `HAVING` é feito um `WHERE` na consulta principal. No caso eu também fiz um `INNER JOIN` na tabela de clientes só para apresentar os nomes também.
+
+```sql
+SELECT X.CPF, C.NOME, X.CONTADOR FROM (
+    SELECT CPF, COUNT(*) AS CONTADOR FROM NOTAS_FISCAIS
+    WHERE YEAR(DATA_VENDA) = 2015
+    GROUP BY CPF
+) X INNER JOIN TABELA_DE_CLIENTES C ON X.CPF = C.CPF WHERE X.CONTADOR > 1400;
+```
+
+[↑ voltar ao topo](#mysql)
+
+### 3.4 _Views_
+
+Uma _view_ é uma tabela lógica, uma consulta pré-definida que pode ser acessada conforma haja necessidade como se fosse uma tabela. É apenas uma "visão" dos dados, que é carregada a partir dos dados originais quando for necessária e existe apenas enquanto está sendo usada.
+
+É um recurso muito utilizado para "simplificar" _queries_ complexas, quebrando-a em _queries_ menores (?).
+
+A sintaxe para criar uma _view_ é aprsentada a seguir e é uma boa prática utilizar prefixo `VW` antes do nome da _view_:
+
+```sql
+CREATE OR REPLACE VIEW `VW_NOME_DA_VIEW` AS query;
+```
+
+E para acessar essa _view_, basta tratá-la como uma tabela:
+
+```sql
+SELECT * FROM `VW_NOME_DA_VIEW`;
+```
+
+[↑ voltar ao topo](#mysql)

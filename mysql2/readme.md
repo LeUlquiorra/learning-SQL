@@ -9,7 +9,7 @@ Os exemplos apresentados nesta parte das notas são baseados no Banco que é cri
 1. [Filtrando consultas](#1-filtrando-consultas)
 2. [Apresentação dos dados de uma consulta](#2-apresentação-dos-dados-de-uma-consulta)
 3. [Juntando tabelas](#3-juntando-tabelas)
-4. [](#4-)
+4. [Funções de _string_](#4-funções-de-_string_)
 5. [](#5-)
 
 ## 1 Filtrando consultas
@@ -542,8 +542,6 @@ SELECT X.CPF, C.NOME, X.CONTADOR FROM (
 ) X INNER JOIN TABELA_DE_CLIENTES C ON X.CPF = C.CPF WHERE X.CONTADOR > 1400;
 ```
 
-[↑ voltar ao topo](#mysql)
-
 ### 3.4 _Views_
 
 Uma _view_ é uma tabela lógica, uma consulta pré-definida que pode ser acessada conforma haja necessidade como se fosse uma tabela. É apenas uma "visão" dos dados, que é carregada a partir dos dados originais quando for necessária e existe apenas enquanto está sendo usada.
@@ -563,3 +561,144 @@ SELECT * FROM `VW_NOME_DA_VIEW`;
 ```
 
 [↑ voltar ao topo](#mysql)
+
+## 4 Relatórios para a empresa Suco de Frutas
+
+### 4.1 Vendas válidas
+
+Na `TABELA_DE_CLIENTES` existe uma coluna chamada `VOLUME_DE_COMPRA`, que armazana o volume máximo que um cliente pode comprar. Analisando as compras de cada cliente e comparando com seu volume máximo podemos verificar quantas vendas não são válidas.
+
+Vamos começar determinando o volume de o "volume de vendas para cada cliente por mês". Para isso precisamos juntar as tabelas de `NOTAS_FISCAIS`, que possui a informação do cliente (CPF), e a tabela de `ITENS_NOTAS_FISCAIS`, que armazena o que foi vendido.
+
+```sql
+SELECT * FROM NOTAS_FISCAIS NF INNER JOIN ITENS_NOTAS_FISCAIS INF ON NF.NUMERO = INF.NUMERO;
+```
+
+Agora agrupamos as vendas de cada CPF por mês e ano:
+
+```sql
+SELECT NF.CPF, DATE_FORMAT(NF.DATA_VENDA, '%Y-%m') AS `ANO-MES`, SUM(INF.QUANTIDADE) AS QUANTIDADE 
+    FROM NOTAS_FISCAIS NF
+    INNER JOIN ITENS_NOTAS_FISCAIS INF ON NF.NUMERO = INF.NUMERO
+    GROUP BY NF.CPF, DATE_FORMAT(NF.DATA_VENDA, '%Y-%m');
+```
+
+lembrando que no `GROUP BY` passamos os campos que não são agrupados. E para obter a quantidade máxima que cada cliente tem direito, basta executar um consulta na `TABELA_DE_CLIENTES`:
+
+```sql
+SELECT CPF, NOME, VOLUME_DE_COMPRA AS QTD_LIMITE FROM TABELA_DE_CLIENTES;
+```
+
+Agora podemos realizar um consulta que retorne no mesmo resultado a quantidade total que cada cliente comprou e seu limite de compra:
+
+```sql
+SELECT NF.CPF, TC.NOME, DATE_FORMAT(NF.DATA_VENDA, '%Y-%m') AS `ANO-MES`,
+    SUM(INF.QUANTIDADE) AS QTD_VENDIDA, MAX(TC.VOLUME_DE_COMPRA) AS QTD_LIMITE
+FROM NOTAS_FISCAIS NF
+    INNER JOIN ITENS_NOTAS_FISCAIS INF ON NF.NUMERO = INF.NUMERO
+    INNER JOIN TABELA_DE_CLIENTES TC ON NF.CPF = TC.CPF
+GROUP BY NF.CPF, TC.NOME, DATE_FORMAT(NF.DATA_VENDA, '%Y-%m');
+```
+
+Para determinar o limite extrapolado ou não, podemos utilizar o recurso das _sub-queries_:
+
+```sql
+SELECT X.CPF, X.NOME, X.`ANO-MES`, X.QTD_VENDIDA, X.QTD_LIMITE,
+    X.QTD_LIMITE - X.QTD_VENDIDA AS DIFERENCA
+FROM (
+    SELECT NF.CPF, TC.NOME, DATE_FORMAT(NF.DATA_VENDA, '%Y-%m') AS `ANO-MES`,
+        SUM(INF.QUANTIDADE) AS QTD_VENDIDA, MAX(TC.VOLUME_DE_COMPRA) AS QTD_LIMITE
+    FROM NOTAS_FISCAIS NF
+        INNER JOIN ITENS_NOTAS_FISCAIS INF ON NF.NUMERO = INF.NUMERO
+        INNER JOIN TABELA_DE_CLIENTES TC ON NF.CPF = TC.CPF
+    GROUP BY NF.CPF, TC.NOME, DATE_FORMAT(NF.DATA_VENDA, '%Y-%m')
+) X ORDER BY X.NOME;
+```
+
+Perceba que as linhas com valor negativo para a coluna `DIFERENCA` significam que a quantidade máxima foi extrapolada. Mas podemos apresentar este resultado de uma forma mais explícita:
+
+```sql
+SELECT X.CPF, X.NOME, X.`ANO-MES`, X.QTD_VENDIDA, X.QTD_LIMITE,
+    CASE WHEN (X.QTD_LIMITE - X.QTD_VENDIDA) < 0 THEN 'INVALIDA'
+    ELSE 'VALIDA' END AS STATUS_VENDA
+FROM (
+    SELECT NF.CPF, TC.NOME, DATE_FORMAT(NF.DATA_VENDA, '%Y-%m') AS `ANO-MES`,
+       SUM(INF.QUANTIDADE) AS QTD_VENDIDA, MAX(TC.VOLUME_DE_COMPRA) AS QTD_LIMITE
+    FROM NOTAS_FISCAIS NF
+        INNER JOIN ITENS_NOTAS_FISCAIS INF ON NF.NUMERO = INF.NUMERO
+        INNER JOIN TABELA_DE_CLIENTES TC ON NF.CPF = TC.CPF
+    GROUP BY NF.CPF, TC.NOME, DATE_FORMAT(NF.DATA_VENDA, '%Y-%m')
+) X ORDER BY X.NOME;
+```
+
+Podemos ainda consultar apenas os clientes que extrapolaram o limite:
+
+```sql
+SELECT X.CPF, X.NOME, X.`ANO-MES`, X.QTD_VENDIDA, X.QTD_LIMITE,
+    X.QTD_LIMITE - X.QTD_VENDIDA AS DIFERENCA
+FROM (
+    SELECT NF.CPF, TC.NOME, DATE_FORMAT(NF.DATA_VENDA, '%Y-%m') AS `ANO-MES`,
+        SUM(INF.QUANTIDADE) AS QTD_VENDIDA, MAX(TC.VOLUME_DE_COMPRA) AS QTD_LIMITE
+    FROM NOTAS_FISCAIS NF
+        INNER JOIN ITENS_NOTAS_FISCAIS INF ON NF.NUMERO = INF.NUMERO
+        INNER JOIN TABELA_DE_CLIENTES TC ON NF.CPF = TC.CPF
+    GROUP BY NF.CPF, TC.NOME, DATE_FORMAT(NF.DATA_VENDA, '%Y-%m')
+) X WHERE (X.QTD_LIMITE - X.QTD_VENDIDA) < 0 ORDER BY DIFERENCA DESC;
+```
+
+### 4.2 Vendas por sabor
+
+Vamos analizar as vendas de cada sabor por ao longo do ano e determinar o percentual de vendas que cada sabor representa. Para realizar essa análise precisamos de informações em três tabelas diferentes: sabor a partir da `TABELA_DE_PRODUTOS`, ano de `NOTAS_FISCAIS` e a quantidade que vem de `ITENS_NOTAS_FISCAIS`. A primeira consulta vai ser apenas para juntar as tabelas e retornar os campos que serão usados:
+
+```sql
+SELECT TP.SABOR, NF.DATA_VENDA, INF.QUANTIDADE
+FROM TABELA_DE_PRODUTOS TP
+    INNER JOIN ITENS_NOTAS_FISCAIS INF ON INF.CODIGO_DO_PRODUTO = TP.CODIGO_DO_PRODUTO
+    INNER JOIN NOTAS_FISCAIS NF ON NF.NUMERO = INF.NUMERO;
+```
+
+Agrupamos os registros por sabor e mês, restringindo para um ano específico, e ordenamos da maior para menor quantidade vendida:
+
+```sql
+SELECT TP.SABOR, YEAR(NF.DATA_VENDA) AS ANO, SUM(INF.QUANTIDADE) AS QTD
+FROM TABELA_DE_PRODUTOS TP
+    INNER JOIN ITENS_NOTAS_FISCAIS INF ON INF.CODIGO_DO_PRODUTO = TP.CODIGO_DO_PRODUTO
+    INNER JOIN NOTAS_FISCAIS NF ON NF.NUMERO = INF.NUMERO
+WHERE YEAR(NF.DATA_VENDA) = 2015
+GROUP BY TP.SABOR, YEAR(NF.DATA_VENDA)
+ORDER BY QTD DESC;
+```
+
+Aora realizamos uma consulta para obter a quantidade total de todos os sabores para o ano específico:
+
+```sql
+SELECT YEAR(NF.DATA_VENDA) AS ANO, SUM(INF.QUANTIDADE) AS QTD
+FROM TABELA_DE_PRODUTOS TP
+    INNER JOIN ITENS_NOTAS_FISCAIS INF ON INF.CODIGO_DO_PRODUTO = TP.CODIGO_DO_PRODUTO
+    INNER JOIN NOTAS_FISCAIS NF ON NF.NUMERO = INF.NUMERO
+WHERE YEAR(NF.DATA_VENDA) = 2015
+GROUP BY YEAR(NF.DATA_VENDA);
+```
+
+A partir disso podemos usar o `INNER JOIN` para juntar essas duas consultas (tabelas) em uma só e apresentar o percentual de cada sabor em relação a quantidade totalq vendida durante o ano:
+
+```sql
+SELECT VENDA_SABOR.SABOR, VENDA_SABOR.ANO, VENDA_SABOR.QTD,
+    ROUND((VENDA_SABOR.QTD/VENDA_TOTAL.TOTAL) * 100, 2) AS PERCENTUAL
+FROM (
+    SELECT TP.SABOR, YEAR(NF.DATA_VENDA) AS ANO, SUM(INF.QUANTIDADE) AS QTD
+    FROM TABELA_DE_PRODUTOS TP
+        INNER JOIN ITENS_NOTAS_FISCAIS INF ON INF.CODIGO_DO_PRODUTO = TP.CODIGO_DO_PRODUTO
+        INNER JOIN NOTAS_FISCAIS NF ON NF.NUMERO = INF.NUMERO
+    WHERE YEAR(NF.DATA_VENDA) = 2015
+    GROUP BY TP.SABOR, YEAR(NF.DATA_VENDA)) AS VENDA_SABOR
+INNER JOIN (
+    SELECT YEAR(NF.DATA_VENDA) AS ANO, SUM(INF.QUANTIDADE) AS TOTAL
+    FROM TABELA_DE_PRODUTOS TP
+        INNER JOIN ITENS_NOTAS_FISCAIS INF ON INF.CODIGO_DO_PRODUTO = TP.CODIGO_DO_PRODUTO
+        INNER JOIN NOTAS_FISCAIS NF ON NF.NUMERO = INF.NUMERO
+    WHERE YEAR(NF.DATA_VENDA) = 2015
+    GROUP BY YEAR(NF.DATA_VENDA)
+) AS VENDA_TOTAL ON VENDA_SABOR.ANO = VENDA_TOTAL.ANO
+ORDER BY VENDA_SABOR.QTD DESC;
+```
